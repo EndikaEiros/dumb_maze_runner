@@ -1,18 +1,16 @@
-import numpy as np
-from gym import Env
-from gym import spaces
-from gym.spaces import Box, Discrete
-import random
-import pygame
 import gymnasium
+import matplotlib.pyplot as plt
+from gym import spaces
 from gymnasium import spaces
+from matplotlib import colors
+from pylab import *
 
 class MazeEnv(gymnasium.Env):
 
     def __init__(self, initial_state, final_state, obstacles):
 
         super(MazeEnv, self).__init__()
-        self.action_log=[]
+        self.action_log = []
 
         # Definimos el espacio de acción
         #   0: UP
@@ -24,17 +22,6 @@ class MazeEnv(gymnasium.Env):
         self.initial_state = initial_state
         self.final_state = final_state
 
-        self.observation_space = [
-            [0, 1, 0, 1, 0, 1, 0, 1],
-            [1, 0, 1, 0, 1, 0, 1, 0],
-            [0, 1, 0, 1, 0, 1, 0, 1],
-            [1, 0, 1, 0, 1, 0, 1, 0],
-            [0, 1, 0, 1, 0, 1, 0, 1],
-            [1, 0, 1, 0, 1, 0, 1, 0],
-            [0, 1, 0, 1, 0, 1, 0, 1],
-            [1, 0, 1, 0, 1, 0, 1, 0]
-        ]
-
         # Duración de la ducha en segundos
         self.max_steps = 64
 
@@ -45,58 +32,43 @@ class MazeEnv(gymnasium.Env):
 
         # Actual state (fila, columna)
         self.current_state = initial_state
-        self.next_state = (0,0)
+        self.next_state = (0, 0)
 
         self.reward = 0
 
-    def is_posible(self, action):
+    def is_posible(self):
 
-        posible = True
-        if action == 0 and self.current_state[0] == 0: posible = False
-        if action == 1 and self.current_state[0] == 7: posible = False
-        if action == 2 and self.current_state[1] == 7: posible = False
-        if action == 3 and self.current_state[1] == 0: posible = False
+        return self.next_state not in self.obstacles and -1 < self.next_state[0] < 8 and -1 < self.next_state[1] < 8
 
-        return posible
-    
     def is_terminal(self):
-        
-        return self.final_state == self.current_state
 
+        return self.final_state == self.current_state
 
     def step(self, action):
 
-        if self.is_posible(action=action):
+        if action == 0: self.next_state = (self.current_state[0] - 1, self.current_state[1])
+        if action == 1: self.next_state = (self.current_state[0] + 1, self.current_state[1])
+        if action == 2: self.next_state = (self.current_state[0], self.current_state[1] + 1)
+        if action == 3: self.next_state = (self.current_state[0], self.current_state[1] - 1)
+
+        if self.is_posible():
 
             self.action_log.append(action)
-            
-            if action == 0: self.next_state = (self.current_state[0] - 1, self.current_state[1])
-            if action == 1: self.next_state = (self.current_state[0] + 1, self.current_state[1])
-            if action == 2: self.next_state = (self.current_state[0], self.current_state[1] + 1)
-            if action == 3: self.next_state = (self.current_state[0], self.current_state[1] - 1)
-
-            if self.next_state not in self.obstacles:
-                self.current_state = self.next_state
-            else:
-                print('ILEGAL ACTION\t')
-                
+            self.current_state = self.next_state
             self.current_step += 1
 
-        else: print('ILEGAL ACTION\t')
-        
+        else:
+            print('ILEGAL ACTION\t')
+
         if self.is_terminal():
             self.reward = 100
 
-
         return self.current_state, self.reward, self.is_terminal()
 
-            
-
     def reset(self):
-        # Contador de tiempo
+
         self.current_step = 0
 
-        # Actual state (fila, columna)
         self.current_state = (0, 0)
 
         self.reward = 0
@@ -106,25 +78,40 @@ class MazeEnv(gymnasium.Env):
         return self.current_state, self.reward, self.is_terminal()
 
     def render(self, mode='human'):
+
         tablero = [
-            [1, 1, 1, 1, 1, 1, 1, 1],
-            [1, 1, 1, 1, 1, 1, 1, 1],
-            [1, 1, 1, 1, 1, 1, 1, 1],
-            [1, 1, 1, 1, 1, 1, 1, 1],
-            [1, 1, 1, 1, 1, 1, 1, 1],
-            [1, 1, 1, 1, 1, 1, 1, 1],
-            [1, 1, 1, 1, 1, 1, 1, 1],
-            [1, 1, 1, 1, 1, 1, 1, 1]
+            [0, 1, 0, 1, 0, 1, 0, 1],
+            [1, 0, 1, 0, 1, 0, 1, 0],
+            [0, 1, 0, 1, 0, 1, 0, 1],
+            [1, 0, 1, 0, 1, 0, 1, 0],
+            [0, 1, 0, 1, 0, 1, 0, 1],
+            [1, 0, 1, 0, 1, 0, 1, 0],
+            [0, 1, 0, 1, 0, 1, 0, 1],
+            [1, 0, 1, 0, 1, 0, 1, 0],
         ]
-        tablero[self.current_state[0]][self.current_state[1]] = 3
-        tablero[self.final_state[0]][self.final_state[1]] = 0
         for obstacle in self.obstacles:
-            tablero[obstacle[0]][obstacle[1]] = 8
+            tablero[obstacle[0]][obstacle[1]] = 2
+        tablero[self.current_state[0]][self.current_state[1]] = 3
+        tablero[self.final_state[0]][self.final_state[1]] = 4
 
+        # Close all windows
+        plt.close('all')
 
-        for line in tablero:
-            print(f"{line}\n")
-        print('\n')
+        # Set colours
+        cmap = colors.ListedColormap(['white', 'black', 'red', 'green', 'blue'])
+        bounds = [0, 1, 2, 3, 4, 5]
+        norm = colors.BoundaryNorm(bounds, cmap.N)
+
+        # Create figure
+        plt.figure(figsize=(8, 8))
+        plt.imshow(tablero, cmap=cmap, norm=norm)
+        plt.xticks(range(8), ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'])
+        plt.yticks(range(8), range(1, 9))
+
+        # Show
+        plt.ion()
+        plt.show()
+        plt.pause(.001)
 
     def close(self):
         pass
