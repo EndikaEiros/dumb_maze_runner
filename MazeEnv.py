@@ -4,6 +4,19 @@ from gym import spaces
 from gymnasium import spaces
 from matplotlib import colors
 from pylab import *
+from time import sleep
+import pygame 
+
+# Dimensiones de la ventana y del tablero
+WIDTH, HEIGHT = 400, 400
+DIMENSION = 8
+SQUARE_SIZE = HEIGHT // DIMENSION
+
+# Colores
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
 
 class MazeEnv(gymnasium.Env):
 
@@ -77,7 +90,51 @@ class MazeEnv(gymnasium.Env):
 
         return self.current_state, self.reward, self.is_terminal()
 
-    def render(self, mode='human'):
+    def render(self):
+
+        pygame.init()
+        screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        pygame.display.set_caption('Tablero de Ajedrez')
+
+        running = True
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+
+            
+            self.draw_board(screen, -1)
+
+            for action in self.action_log:
+                self.draw_board(screen, action)
+                pygame.display.flip()
+                pygame.display.flip()
+                pygame.display.flip()
+
+            running = False
+
+        pygame.quit()
+
+    def draw_board(self, screen, action):
+
+        if action == -1:
+            self.current_state = self.initial_state
+        else:
+            self.step(action=action)
+
+        for row in range(DIMENSION):
+            for col in range(DIMENSION):
+                color = WHITE if (row + col) % 2 == 0 else BLACK
+                pygame.draw.rect(screen, color, (col * SQUARE_SIZE, row * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE))
+        
+        for obstacle in self.obstacles:
+            pygame.draw.rect(screen, RED, ((obstacle[0])*SQUARE_SIZE, (obstacle[1])*SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE))
+
+        pygame.draw.circle(screen, GREEN, ((self.current_state[0]+0.5)*SQUARE_SIZE, (self.current_state[1]+0.5)*SQUARE_SIZE), (SQUARE_SIZE-8)/2)
+        sleep(0.25)
+
+
+    def render_human(self):
 
         tablero = [
             [0, 1, 0, 1, 0, 1, 0, 1],
@@ -112,6 +169,8 @@ class MazeEnv(gymnasium.Env):
         plt.ion()
         plt.show()
         plt.pause(.001)
+
+
 
     def close(self):
         pass
