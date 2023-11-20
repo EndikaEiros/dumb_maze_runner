@@ -5,7 +5,8 @@ from gymnasium import spaces
 from matplotlib import colors
 from pylab import *
 from time import sleep
-import pygame 
+import pygame
+import cv2
 
 # Dimensiones de la ventana y del tablero
 WIDTH, HEIGHT = 400, 400
@@ -18,12 +19,14 @@ BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 
+
 class MazeEnv(gymnasium.Env):
 
     def __init__(self, initial_state, final_state, obstacles):
 
         super(MazeEnv, self).__init__()
         self.action_log = []
+        self.position_log = set(initial_state)
 
         # Definimos el espacio de acción
         #   0: UP
@@ -31,6 +34,8 @@ class MazeEnv(gymnasium.Env):
         #   2: RIGHT
         #   3: LEFT
         self.action_space = spaces.Discrete(4)
+        self.observation_space = spaces.Box(low=0, high=80,
+                                            shape=(4,), dtype=np.float64)
 
         self.initial_state = initial_state
         self.final_state = final_state
@@ -43,11 +48,30 @@ class MazeEnv(gymnasium.Env):
         # Contador de tiempo
         self.current_step = 0
 
+        self.truncated = False
+
         # Actual state (fila, columna)
         self.current_state = initial_state
         self.next_state = (0, 0)
 
         self.reward = 0
+
+        ## BOARD ##
+        self.img =np.zeros((640, 640, 3), dtype=np.uint8)
+        for x in range(0, 9):
+            if x % 2 == 0: p = range(0, 8, 2)
+            else: p = range(1, 9, 2)
+            for y in p:
+                cv2.rectangle(self.img, (x*80, y*80), (x*80+80,y*80+80), (255,255,255), -1)       
+        ###############
+
+        for obstacle in obstacles:
+            cv2.rectangle(self.img, (obstacle[0]*80, obstacle[1]*80),
+                          (obstacle[0]*80+80,obstacle[1]*80+80), (0,0,255), -1)
+        cv2.rectangle(self.img, (self.final_state[0]*80, self.final_state[1]*80),
+                          (self.final_state[0]*80+80,self.final_state[1]*80+80), (0,255,255), -1)
+        
+
 
     def is_posible(self):
 
@@ -71,106 +95,62 @@ class MazeEnv(gymnasium.Env):
             self.current_step += 1
 
         else:
-            print('ILEGAL ACTION\t')
+            #print('ILEGAL ACTION\t')
+            self.reward = -100
+            # self.truncated = True
 
         if self.is_terminal():
             self.reward = 100
 
-        return self.current_state, self.reward, self.is_terminal()
+        elif self.current_state in self.position_log:
+            self.reward = -1
+
+        else: self.reward = 1
+
+        ########## Visualización ##########
+
+        board = self.img.copy()
+
+        cv2.circle(board, (self.current_state[0]*80+40, self.current_state[1]*80+40), 30, (0,255,0), -1)
+
+        cv2.imshow('DUMB MAZE RUNNER', board)
+        cv2.waitKey(1)
+        sleep(0.1)
+
+        ###################################   
+
+        obs = np.array([self.current_state[0], self.current_state[1],
+                        abs(self.current_state[0]-self.final_state[0]),
+                        abs(self.current_state[1]-self.final_state[1])])
+        
+        return obs, self.reward, self.is_terminal(), self.truncated, {}
 
     def reset(self):
 
         self.current_step = 0
-
         self.current_state = (0, 0)
-
         self.reward = 0
-
         self.action_log = []
 
-        return self.current_state, self.reward, self.is_terminal()
+        info = {}
+
+        obs = np.array([self.current_state[0], self.current_state[1],
+                        abs(self.current_state[0]-self.final_state[0]),
+                        abs(self.current_state[1]-self.final_state[1])])
+
+        return obs, info
 
     def render(self):
 
-        pygame.init()
-        screen = pygame.display.set_mode((WIDTH, HEIGHT))
-        pygame.display.set_caption('Tablero de Ajedrez')
-
-        running = True
-        while running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-
-            
-            self.draw_board(screen, -1)
-
-            for action in self.action_log:
-                self.draw_board(screen, action)
-                pygame.display.flip()
-                pygame.display.flip()
-                pygame.display.flip()
-
-            running = False
-
-        pygame.quit()
-
-    def draw_board(self, screen, action):
-
-        if action == -1:
-            self.current_state = self.initial_state
-        else:
-            self.step(action=action)
-
-        for row in range(DIMENSION):
-            for col in range(DIMENSION):
-                color = WHITE if (row + col) % 2 == 0 else BLACK
-                pygame.draw.rect(screen, color, (col * SQUARE_SIZE, row * SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE))
-        
-        for obstacle in self.obstacles:
-            pygame.draw.rect(screen, RED, ((obstacle[0])*SQUARE_SIZE, (obstacle[1])*SQUARE_SIZE, SQUARE_SIZE, SQUARE_SIZE))
-
-        pygame.draw.circle(screen, GREEN, ((self.current_state[0]+0.5)*SQUARE_SIZE, (self.current_state[1]+0.5)*SQUARE_SIZE), (SQUARE_SIZE-8)/2)
-        sleep(0.25)
-
-
-    def render_human(self):
-
-        tablero = [
-            [0, 1, 0, 1, 0, 1, 0, 1],
-            [1, 0, 1, 0, 1, 0, 1, 0],
-            [0, 1, 0, 1, 0, 1, 0, 1],
-            [1, 0, 1, 0, 1, 0, 1, 0],
-            [0, 1, 0, 1, 0, 1, 0, 1],
-            [1, 0, 1, 0, 1, 0, 1, 0],
-            [0, 1, 0, 1, 0, 1, 0, 1],
-            [1, 0, 1, 0, 1, 0, 1, 0],
-        ]
-        for obstacle in self.obstacles:
-            tablero[obstacle[0]][obstacle[1]] = 2
-        tablero[self.current_state[0]][self.current_state[1]] = 3
-        tablero[self.final_state[0]][self.final_state[1]] = 4
-
-        # Close all windows
-        plt.close('all')
-
-        # Set colours
-        cmap = colors.ListedColormap(['white', 'black', 'red', 'green', 'blue'])
-        bounds = [0, 1, 2, 3, 4, 5]
-        norm = colors.BoundaryNorm(bounds, cmap.N)
-
-        # Create figure
-        plt.figure(figsize=(8, 8))
-        plt.imshow(tablero, cmap=cmap, norm=norm)
-        plt.xticks(range(8), ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'])
-        plt.yticks(range(8), range(1, 9))
-
-        # Show
-        plt.ion()
-        plt.show()
-        plt.pause(.001)
-
-
+        for action in self.action_log:
+            sleep(0.165)
+            if self.current_state == self.final_state: break
+            board = self.img.copy()
+            cv2.circle(board, (self.current_state[0]*80+40, self.current_state[1]*80+40), 30, (0,255,0), -1)
+            cv2.imshow("DUMB MAZE RUNNER", board)
+            cv2.waitKey(1)
+            sleep(0.165)
+            self.step(action)
 
     def close(self):
         pass
