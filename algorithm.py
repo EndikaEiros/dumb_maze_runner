@@ -26,7 +26,7 @@ def evaluate_policy(model, env, n_eval_episodes: int = 100):
 
         if not truncated: wins += 1
 
-        print(f" - Episode: {n + 1}\t - Reward: {episode_reward}\t - Steps: {episode_steps}")
+        print(f" - Episode: {n + 1}\t\t - Steps: {episode_steps}")
         total_reward += episode_reward
         total_steps += episode_steps
 
@@ -55,9 +55,11 @@ render_env = MazeEnv(initial_state=(2, 2), final_state=(-1, -1),
 model = PPO("MlpPolicy", env, verbose=0)
 
 for i in range(10):
-    model.learn(total_timesteps=2)
+    print(f"\n training...\t({i}/10)\n")
+    model.learn(total_timesteps=100_000)
     model.save(f"ppo_snake_{i}.model")
-    rew, steps = evaluate_policy(model=model, env=render_env)
+    print(f"\n EVALUATION: {i}\t TRAINING STEPS: {100_000*i}\n")
+    rew, steps = evaluate_policy(model=model, env=render_env, n_eval_episodes=5)
 
 
 
