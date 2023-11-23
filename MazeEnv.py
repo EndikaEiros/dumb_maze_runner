@@ -7,6 +7,7 @@ from pylab import *
 from time import sleep
 import pygame
 import cv2
+from random import randint
 
 # Dimensiones de la ventana y del tablero
 WIDTH, HEIGHT = 400, 400
@@ -22,7 +23,7 @@ GREEN = (0, 255, 0)
 
 class MazeEnv(gymnasium.Env):
 
-    def __init__(self, initial_state, final_state, obstacles):
+    def __init__(self, initial_state, final_state, obstacles, render):
 
         super(MazeEnv, self).__init__()
         self.action_log = []
@@ -38,12 +39,14 @@ class MazeEnv(gymnasium.Env):
                                             shape=(4,), dtype=np.float64)
 
         self.initial_state = initial_state
-        self.final_state = final_state
+        self.final_state = self.random_final_state(obstacles, initial_state)
 
         # Duración de la ducha en segundos
         self.max_steps = 64
 
         self.obstacles = obstacles
+
+        self.renderize = render
 
         # Contador de tiempo
         self.current_step = 0
@@ -56,22 +59,32 @@ class MazeEnv(gymnasium.Env):
 
         self.reward = 0
 
-        ## BOARD ##
-        self.img =np.zeros((640, 640, 3), dtype=np.uint8)
-        for x in range(0, 9):
-            if x % 2 == 0: p = range(0, 8, 2)
-            else: p = range(1, 9, 2)
-            for y in p:
-                cv2.rectangle(self.img, (x*80, y*80), (x*80+80,y*80+80), (255,255,255), -1)       
-        ###############
+        if self.renderize:
 
-        for obstacle in obstacles:
-            cv2.rectangle(self.img, (obstacle[0]*80, obstacle[1]*80),
-                          (obstacle[0]*80+80,obstacle[1]*80+80), (0,0,255), -1)
-        cv2.rectangle(self.img, (self.final_state[0]*80, self.final_state[1]*80),
-                          (self.final_state[0]*80+80,self.final_state[1]*80+80), (0,255,255), -1)
+            ## BOARD ##
+            self.img =np.zeros((640, 640, 3), dtype=np.uint8)
+            for x in range(0, 9):
+                if x % 2 == 0: p = range(0, 8, 2)
+                else: p = range(1, 9, 2)
+                for y in p:
+                    cv2.rectangle(self.img, (x*80, y*80), (x*80+80,y*80+80), (255,255,255), -1)       
+
+            # OBSTACLES
+            for obstacle in obstacles:
+                cv2.rectangle(self.img, (obstacle[0]*80, obstacle[1]*80),
+                            (obstacle[0]*80+80,obstacle[1]*80+80), (0,0,255), -1)
+                
+            # GOAL
+            cv2.rectangle(self.img, (self.final_state[0]*80, self.final_state[1]*80),
+                            (self.final_state[0]*80+80,self.final_state[1]*80+80), (0,255,255), -1)
         
 
+    def random_final_state(self, obstacles, initial_state):
+
+        final_state = (randint(0,7), randint(0,7))
+        while final_state in obstacles or final_state == initial_state:
+            final_state = (randint(0,7), randint(0,7))
+        return final_state
 
     def is_posible(self):
 
@@ -79,7 +92,7 @@ class MazeEnv(gymnasium.Env):
 
     def is_terminal(self):
 
-        return self.final_state == self.current_state
+        return self.final_state[0] == self.current_state[0] and self.final_state[1] == self.current_state[1]
 
     def step(self, action):
 
@@ -88,34 +101,47 @@ class MazeEnv(gymnasium.Env):
         if action == 2: self.next_state = (self.current_state[0], self.current_state[1] + 1)
         if action == 3: self.next_state = (self.current_state[0], self.current_state[1] - 1)
 
+        # print(f'Distancia goal: {np.sum(np.abs(np.array(self.current_state) - np.array(self.final_state)))}')
         if self.is_posible():
 
             self.action_log.append(action)
             self.current_state = self.next_state
             self.current_step += 1
 
+            self.reward = 15 - np.sum(np.abs(np.array(self.current_state) - np.array(self.final_state)))
+
+            if self.current_state in self.position_log:
+                self.reward -= 1
+
+
         else:
             #print('ILEGAL ACTION\t')
             self.reward = -100
             # self.truncated = True
 
-        if self.is_terminal():
-            self.reward = 100
-
-        elif self.current_state in self.position_log:
-            self.reward = -1
-
-        else: self.reward = 1
 
         ########## Visualización ##########
 
-        board = self.img.copy()
+        
 
-        cv2.circle(board, (self.current_state[0]*80+40, self.current_state[1]*80+40), 30, (0,255,0), -1)
+        if self.is_terminal():
 
-        cv2.imshow('DUMB MAZE RUNNER', board)
-        cv2.waitKey(1)
-        sleep(0.1)
+            board = np.zeros((640, 640, 3), dtype=np.uint8)
+            cv2.putText(board, 'You Win!', (280, 320), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+            self.reward = 100
+            sleep_time = 1
+            # TODO return action log
+        
+        else: 
+
+            board = self.img.copy()
+            cv2.circle(board, (self.current_state[0]*80+40, self.current_state[1]*80+40), 30, (0,255,0), -1)
+            sleep_time = 0.05
+
+        if self.renderize:
+            cv2.imshow('DUMB MAZE RUNNER', board)
+            cv2.waitKey(1)
+            sleep(sleep_time)
 
         ###################################   
 
@@ -131,6 +157,26 @@ class MazeEnv(gymnasium.Env):
         self.current_state = (0, 0)
         self.reward = 0
         self.action_log = []
+        self.final_state = self.random_final_state(self.obstacles, self.initial_state)
+
+        self.img =np.zeros((640, 640, 3), dtype=np.uint8)
+
+        if self.renderize:
+
+            ## BOARD ##
+            
+            for x in range(0, 9):
+                if x % 2 == 0: p = range(0, 8, 2)
+                else: p = range(1, 9, 2)
+                for y in p:
+                    cv2.rectangle(self.img, (x*80, y*80), (x*80+80,y*80+80), (255,255,255), -1)       
+            ###############
+
+            for obstacle in self.obstacles:
+                cv2.rectangle(self.img, (obstacle[0]*80, obstacle[1]*80),
+                            (obstacle[0]*80+80,obstacle[1]*80+80), (0,0,255), -1)
+            cv2.rectangle(self.img, (self.final_state[0]*80, self.final_state[1]*80),
+                            (self.final_state[0]*80+80,self.final_state[1]*80+80), (0,255,255), -1)
 
         info = {}
 
@@ -140,17 +186,6 @@ class MazeEnv(gymnasium.Env):
 
         return obs, info
 
-    def render(self):
-
-        for action in self.action_log:
-            sleep(0.165)
-            if self.current_state == self.final_state: break
-            board = self.img.copy()
-            cv2.circle(board, (self.current_state[0]*80+40, self.current_state[1]*80+40), 30, (0,255,0), -1)
-            cv2.imshow("DUMB MAZE RUNNER", board)
-            cv2.waitKey(1)
-            sleep(0.165)
-            self.step(action)
 
     def close(self):
         pass
