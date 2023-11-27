@@ -1,3 +1,4 @@
+import cv2
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_checker import check_env
 
@@ -22,7 +23,8 @@ def evaluate_policy(model, env, n_eval_episodes: int = 100):
             episode_reward += reward
             episode_steps += 1
 
-        print(f" - Episode: {n + 1}\t\t - Steps: {episode_steps}")
+        print(f" - Episode: {n + 1}\t\t - Steps: {episode_steps}\t\t - Reward: {episode_reward}")
+        cv2.destroyAllWindows()
         total_reward += episode_reward
         total_steps += episode_steps
 
@@ -39,17 +41,17 @@ maze_env = MazeEnv(render=False)
 #     check_env(render_env)
 
 # Crear y entrenar el modelo PPO
-ppo_model = PPO("MlpPolicy", maze_env, verbose=0)
+# ppo_model = PPO("MlpPolicy", maze_env, verbose=0)
+ppo_model = PPO.load("ppo_maze_v2.model", env=maze_env)
 
-
-STEPS_PER_BATCH = 1_000_000
-BATCH_SIZE = 10
+STEPS_PER_BATCH = 100_000
+BATCH_SIZE = 2
 EVAL_EPISODES = 5
 
 for i in range(BATCH_SIZE):
     print(f"\n training...\n")
     ppo_model.learn(total_timesteps=STEPS_PER_BATCH)
-    print(f"\n EVALUATION: {i}\t TRAINING STEPS: {STEPS_PER_BATCH * i}\n")
+    print(f"\n EVALUATION: {i+1}\t TRAINING STEPS: {STEPS_PER_BATCH * (i+1)}\n")
     evaluate_policy(model=ppo_model, env=MazeEnv(render=True), n_eval_episodes=EVAL_EPISODES)
 
-ppo_model.save(f"ppo_snake.model")
+ppo_model.save(f"ppo_maze_v4.model")
