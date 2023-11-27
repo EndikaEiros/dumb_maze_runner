@@ -1,14 +1,12 @@
-from MazeEnv import MazeEnv
-import pygame
-import numpy as np
-from stable_baselines3.common.env_checker import check_env
 from stable_baselines3 import PPO
+from stable_baselines3.common.env_checker import check_env
+
+from MazeEnv import MazeEnv
 
 
 def evaluate_policy(model, env, n_eval_episodes: int = 100):
     total_steps = 0
     total_reward = 0
-    wins = 0
 
     for n in range(n_eval_episodes):
 
@@ -24,8 +22,6 @@ def evaluate_policy(model, env, n_eval_episodes: int = 100):
             episode_reward += reward
             episode_steps += 1
 
-        if not truncated: wins += 1
-
         print(f" - Episode: {n + 1}\t\t - Steps: {episode_steps}")
         total_reward += episode_reward
         total_steps += episode_steps
@@ -36,30 +32,24 @@ def evaluate_policy(model, env, n_eval_episodes: int = 100):
     print(f"- Average reward per episode: {avg_reward}")
     print(f"- Average steps per episode: {avg_steps}")
 
-    return avg_reward, avg_steps
 
+maze_env = MazeEnv(render=False)
 
-
-env = MazeEnv(initial_state=(2, 2), final_state=(-1, -1),
-              obstacles=[(1,1), (1,2), (2,1), (4,1), (5,1), (4,3), (5,3), (6,3), (1,6), (2,6), (3,6), (4,6), (5,6), (7,6), (2,4)],
-              render=False)
-
-render_env = MazeEnv(initial_state=(2, 2), final_state=(-1, -1),
-              obstacles=[(1,1), (1,2), (2,1), (4,1), (5,1), (4,3), (5,3), (6,3), (1,6), (2,6), (3,6), (4,6), (5,6), (7,6), (2,4)],
-              render=True)
-
-# check_env(env)
-
+# while True:
+#     check_env(render_env)
 
 # Crear y entrenar el modelo PPO
-model = PPO("MlpPolicy", env, verbose=0)
-
-for i in range(10):
-    print(f"\n training...\t({i}/10)\n")
-    model.learn(total_timesteps=100_000)
-    model.save(f"ppo_snake_{i}.model")
-    print(f"\n EVALUATION: {i}\t TRAINING STEPS: {100_000*i}\n")
-    rew, steps = evaluate_policy(model=model, env=render_env, n_eval_episodes=5)
+ppo_model = PPO("MlpPolicy", maze_env, verbose=0)
 
 
+STEPS_PER_BATCH = 1_000_000
+BATCH_SIZE = 10
+EVAL_EPISODES = 5
 
+for i in range(BATCH_SIZE):
+    print(f"\n training...\n")
+    ppo_model.learn(total_timesteps=STEPS_PER_BATCH)
+    print(f"\n EVALUATION: {i}\t TRAINING STEPS: {STEPS_PER_BATCH * i}\n")
+    evaluate_policy(model=ppo_model, env=MazeEnv(render=True), n_eval_episodes=EVAL_EPISODES)
+
+ppo_model.save(f"ppo_snake.model")
