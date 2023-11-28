@@ -42,16 +42,17 @@ maze_env = MazeEnv(render=False)
 
 # Crear y entrenar el modelo PPO
 # ppo_model = PPO("MlpPolicy", maze_env, verbose=0)
-ppo_model = PPO.load("ppo_maze_v2.model", env=maze_env)
+ppo_model = PPO.load("ppo_maze_v2.1.model", env=maze_env)
 
-STEPS_PER_BATCH = 100_000
-BATCH_SIZE = 2
+STEPS_PER_BATCH = 10_000
+BATCH_SIZE = 1
 EVAL_EPISODES = 5
 
-for i in range(BATCH_SIZE):
-    print(f"\n training...\n")
-    ppo_model.learn(total_timesteps=STEPS_PER_BATCH)
-    print(f"\n EVALUATION: {i+1}\t TRAINING STEPS: {STEPS_PER_BATCH * (i+1)}\n")
-    evaluate_policy(model=ppo_model, env=MazeEnv(render=True), n_eval_episodes=EVAL_EPISODES)
+# for i in range(BATCH_SIZE):
+#     print(f"\n training...\n")
+#     ppo_model.learn(total_timesteps=STEPS_PER_BATCH)
+#     print(f"\n EVALUATION: {i+1}\t TRAINING STEPS: {STEPS_PER_BATCH * (i+1)}\n")
+#     evaluate_policy(model=ppo_model, env=MazeEnv(render=True), n_eval_episodes=EVAL_EPISODES)
 
-ppo_model.save(f"ppo_maze_v4.model")
+evaluate_policy(ppo_model, MazeEnv(render=True), n_eval_episodes=10)
+ppo_model.save(f"ppo_maze_v2.1.model")
