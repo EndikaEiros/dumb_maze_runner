@@ -1,9 +1,8 @@
 import json
-import random
-from random import randint
-from random import random
-from time import sleep
 from collections import deque
+from random import randint
+from time import sleep
+
 import cv2
 import gymnasium
 from gym import spaces
@@ -17,10 +16,17 @@ with open('environment.json', 'r', encoding='utf8') as file:
 
 def random_final_state(obstacles, initial_state):
     # Generar un destino random
-    final_state = (randint(0, 7), randint(0, 7))
+    final_state = (randint(1, 6), randint(1, 6))
     while final_state in obstacles or final_state == initial_state:
-        final_state = (randint(0, 7), randint(0, 7))
+        final_state = (randint(1, 6), randint(1, 6))
     return final_state
+
+def random_obstacles(num_obstacles):
+
+    obstacles = {(0, 4), (0, 5)}
+    while len(obstacles) < num_obstacles:
+        obstacles.add((randint(1, 6), randint(1, 6)))
+    return list(obstacles)
 
 
 class MazeEnv(gymnasium.Env):
@@ -33,7 +39,8 @@ class MazeEnv(gymnasium.Env):
         self.initial_state = (0, 0)
 
         # Obstáculos
-        self.obstacles = [(elem[0], elem[1]) for elem in DATA['obstacles']]
+        # self.obstacles = [(elem[0], elem[1]) for elem in DATA['obstacles']]
+        self.obstacles = random_obstacles(5)
 
         # self.final_state = DATA['final_state']
         self.final_state = (7, 7)
@@ -48,7 +55,7 @@ class MazeEnv(gymnasium.Env):
         #   3: LEFT
         self.action_space = spaces.Discrete(4)
         self.observation_space = spaces.Box(low=0, high=80,
-                                            shape=(4,), dtype=np.float64)
+                                            shape=(5 + (len(self.obstacles) * 2),), dtype=np.float64)
 
         # Visualización del juego
         self.render = render
@@ -64,8 +71,8 @@ class MazeEnv(gymnasium.Env):
         # Número de pasos
         self.num_steps = 0
 
-        # Recompensa
-        self.reward = 0
+        # Recompensas
+        self.reward, self.prev_reward = 0, 0
 
         if self.render:
 
@@ -77,7 +84,7 @@ class MazeEnv(gymnasium.Env):
                 else:
                     p = range(1, 9, 2)
                 for y in p:
-                    cv2.rectangle(self.img, (x * 80, y * 80), (x * 80 + 80, y * 80 + 80), (255, 255, 255), -1)
+                    cv2.rectangle(self.img, (x * 80, y * 80), (x * 80 + 80, y * 80 + 80), (50, 50, 50), -1)
 
             # Draw obstacles (red)
             for obstacle in self.obstacles:
@@ -110,8 +117,8 @@ class MazeEnv(gymnasium.Env):
 
             if self.render:
                 board = self.img.copy()
-                cv2.circle(board, (self.current_state[0] * 80 + 40, self.current_state[1] * 80 + 40), 30, (0, 255, 0),
-                           -1)
+                cv2.circle(board, (self.current_state[0] * 80 + 40, self.current_state[1] * 80 + 40),
+                           30, (0, 255, 0), -1)
                 cv2.imshow('DUMB MAZE RUNNER', board)
                 cv2.waitKey(1)
                 sleep(0.2)
@@ -120,8 +127,8 @@ class MazeEnv(gymnasium.Env):
 
                 if self.render:
                     board = np.zeros((640, 640, 3), dtype=np.uint8)
-                    cv2.putText(board, f'Win in {self.num_steps} steps)', (200, 320), cv2.FONT_HERSHEY_SIMPLEX, 1,
-                                (255, 255, 255), 2, cv2.LINE_AA)
+                    cv2.putText(board, f'Win in {self.num_steps} steps)', (200, 320), cv2.FONT_HERSHEY_SIMPLEX,
+                                1, (255, 255, 255), 2, cv2.LINE_AA)
                     cv2.imshow('DUMB MAZE RUNNER', board)
                     cv2.waitKey(1)
                     sleep(1)
@@ -132,24 +139,33 @@ class MazeEnv(gymnasium.Env):
 
             ############# Rewards #############
 
-            manhattan_dist_to_goal = 0.001 + np.sum(np.abs(np.array(self.current_state) - np.array(self.final_state)))
-            self.reward = (1 / manhattan_dist_to_goal) - (self.num_steps/100) + goal_reward
+            manhattan_dist_to_goal = np.sum(np.abs(np.array(self.current_state) - np.array(self.final_state)))
+            reward = 14 - manhattan_dist_to_goal
+            goal_reward -= self.num_steps
+            self.reward = reward - self.prev_reward + goal_reward - self.num_steps/100
+            self.prev_reward = self.reward
+
+            # if self.num_steps >= MAX_STEPS_LIMIT:
+            #     self.done = True
+            #     self.truncated = True
+            #     self.reward -= 100
 
         else:
-            self.reward = -100
-            self.truncated = True
-            self.done = True
 
-        if self.num_steps >= MAX_STEPS_LIMIT:
-            self.done = True
-            self.truncated = True
             self.reward = -100
+            self.truncated = True
+            self.done = True
 
         ######## Nueva observación ########
+        obstacles = list()
+        for obstacle in self.obstacles:
+            obstacles.append(obstacle[0])
+            obstacles.append(obstacle[1])
 
         obs = np.array([self.current_state[0], self.current_state[1],
                         abs(self.current_state[0] - self.final_state[0]),
-                        abs(self.current_state[1] - self.final_state[1])])
+                        abs(self.current_state[1] - self.final_state[1]),
+                        self.num_steps] + obstacles)
 
         return obs, self.reward, self.done, self.truncated, info
 
@@ -177,7 +193,8 @@ class MazeEnv(gymnasium.Env):
                                             shape=(4,), dtype=np.float64)
 
         # Lista de coordenadas de los obstaculos
-        self.obstacles = [(elem[0], elem[1]) for elem in DATA['obstacles']]
+        # self.obstacles = [(elem[0], elem[1]) for elem in DATA['obstacles']]
+        self.obstacles = random_obstacles(5)
 
         # Fin de la partida
         self.truncated = False
@@ -190,8 +207,8 @@ class MazeEnv(gymnasium.Env):
         # Número de pasos
         self.num_steps = 0
 
-        # Recompensa
-        self.reward = 0
+        # Recompensas
+        self.reward, self.prev_reward = 0, 0
 
         if self.render:
 
@@ -203,7 +220,7 @@ class MazeEnv(gymnasium.Env):
                 else:
                     p = range(1, 9, 2)
                 for y in p:
-                    cv2.rectangle(self.img, (x * 80, y * 80), (x * 80 + 80, y * 80 + 80), (255, 255, 255), -1)
+                    cv2.rectangle(self.img, (x * 80, y * 80), (x * 80 + 80, y * 80 + 80), (50, 50, 50), -1)
 
             # Draw obstacles (red)
             for obstacle in self.obstacles:
@@ -214,9 +231,15 @@ class MazeEnv(gymnasium.Env):
             cv2.rectangle(self.img, (self.final_state[0] * 80, self.final_state[1] * 80),
                           (self.final_state[0] * 80 + 80, self.final_state[1] * 80 + 80), (0, 255, 255), -1)
 
+        obstacles = list()
+        for obstacle in self.obstacles:
+            obstacles.append(obstacle[0])
+            obstacles.append(obstacle[1])
+
         obs = np.array([self.current_state[0], self.current_state[1],
                         abs(self.current_state[0] - self.final_state[0]),
-                        abs(self.current_state[1] - self.final_state[1])])
+                        abs(self.current_state[1] - self.final_state[1]),
+                        self.num_steps] + obstacles)
 
         return obs, info
 
