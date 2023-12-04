@@ -139,7 +139,7 @@ class MazeEnv(gymnasium.Env):
 
             ############# Rewards #############
 
-            self.reward = goal_reward + 1
+            self.reward = goal_reward
 
             # manhattan_dist_to_goal = np.sum(np.abs(np.array(self.current_state) - np.array(self.final_state)))
             # if goal_reward == 0: self.reward = 1 / manhattan_dist_to_goal
