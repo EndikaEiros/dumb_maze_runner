@@ -1,4 +1,4 @@
-import json
+import random
 from collections import deque
 from random import randint
 from time import sleep
@@ -10,40 +10,41 @@ from gymnasium import spaces
 from pylab import *
 
 MAX_STEPS_LIMIT = 64
-with open('environment.json', 'r', encoding='utf8') as file:
-    DATA = json.load(file)
+NUM_OBSTACLES = 5
+GOAL_REWARD = 10
+DIED_REWARD = -10
 
 
-def random_final_state(obstacles, initial_state):
+def random_final_state(initial_state):
     # Generar un destino random
-    final_state = (randint(1, 6), randint(1, 6))
-    while final_state in obstacles or final_state == initial_state:
-        final_state = (randint(1, 6), randint(1, 6))
+    final_state = (randint(5, 7), randint(5, 7))
+    while final_state == initial_state:
+        final_state = (randint(5, 7), randint(5, 7))
     return final_state
 
-def random_obstacles(num_obstacles):
 
-    obstacles = {(0, 4), (0, 5)}
+def random_obstacles(num_obstacles, initial_state, final_state):
+    obstacles = set()
     while len(obstacles) < num_obstacles:
-        obstacles.add((randint(1, 6), randint(1, 6)))
+        new_obstacle = (randint(0, 7), randint(0, 7))
+        if new_obstacle != initial_state and new_obstacle != final_state:
+            obstacles.add(new_obstacle)
     return list(obstacles)
 
 
 class MazeEnv(gymnasium.Env):
 
-    def __init__(self, render):
+    def __init__(self, render=False):
 
         super(MazeEnv, self).__init__()
 
         # Estado inicial
-        self.initial_state = (0, 0)
+        self.initial_state = (np.random.choice([0, 7]), np.random.choice([7, 0]))
+
+        self.final_state = random_final_state(self.initial_state)
 
         # Obstáculos
-        # self.obstacles = [(elem[0], elem[1]) for elem in DATA['obstacles']]
-        self.obstacles = random_obstacles(5)
-
-        # self.final_state = DATA['final_state']
-        self.final_state = (7, 7)
+        self.obstacles = random_obstacles(NUM_OBSTACLES, self.initial_state, self.final_state)
 
         self.action_log = []
         self.state_log = deque([], maxlen=8)
@@ -54,8 +55,7 @@ class MazeEnv(gymnasium.Env):
         #   2: RIGHT
         #   3: LEFT
         self.action_space = spaces.Discrete(4)
-        self.observation_space = spaces.Box(low=0, high=80,
-                                            shape=(5 + (len(self.obstacles) * 2),), dtype=np.float64)
+        self.observation_space = spaces.Box(low=0, high=80, shape=(6,), dtype=np.float64)
 
         # Visualización del juego
         self.render = render
@@ -97,7 +97,7 @@ class MazeEnv(gymnasium.Env):
 
     def step(self, action):
 
-        info = {"Solution": None}
+        info = {"Solution": []}
 
         ############## Mover ##############
 
@@ -121,80 +121,70 @@ class MazeEnv(gymnasium.Env):
                            30, (0, 255, 0), -1)
                 cv2.imshow('DUMB MAZE RUNNER', board)
                 cv2.waitKey(1)
-                sleep(0.2)
+                sleep(0.33)
 
             if self._is_terminal(self.next_state):
 
                 if self.render:
                     board = np.zeros((640, 640, 3), dtype=np.uint8)
-                    cv2.putText(board, f'Win in {self.num_steps} steps)', (200, 320), cv2.FONT_HERSHEY_SIMPLEX,
+                    cv2.putText(board, f'Win in {self.num_steps} steps', (200, 320), cv2.FONT_HERSHEY_SIMPLEX,
                                 1, (255, 255, 255), 2, cv2.LINE_AA)
                     cv2.imshow('DUMB MAZE RUNNER', board)
                     cv2.waitKey(1)
-                    sleep(1)
+                    sleep(0.33)
 
                 info["Solution"] = self.action_log
-                goal_reward = 100
+                goal_reward = GOAL_REWARD
                 self.done = True
 
             ############# Rewards #############
 
-            manhattan_dist_to_goal = np.sum(np.abs(np.array(self.current_state) - np.array(self.final_state)))
-            reward = 14 - manhattan_dist_to_goal
-            goal_reward -= self.num_steps
-            self.reward = reward - self.prev_reward + goal_reward - self.num_steps/100
-            self.prev_reward = self.reward
+            self.reward = goal_reward + 1
 
-            # if self.num_steps >= MAX_STEPS_LIMIT:
-            #     self.done = True
-            #     self.truncated = True
-            #     self.reward -= 100
+            # manhattan_dist_to_goal = np.sum(np.abs(np.array(self.current_state) - np.array(self.final_state)))
+            # if goal_reward == 0: self.reward = 1 / manhattan_dist_to_goal
+
+            if self.num_steps >= MAX_STEPS_LIMIT:
+                self.done = True
+                self.truncated = True
+                self.reward = 0
 
         else:
 
-            self.reward = -100
+            self.reward = DIED_REWARD
             self.truncated = True
             self.done = True
 
-        ######## Nueva observación ########
-        obstacles = list()
-        for obstacle in self.obstacles:
-            obstacles.append(obstacle[0])
-            obstacles.append(obstacle[1])
+        ######################### Return #########################
 
-        obs = np.array([self.current_state[0], self.current_state[1],
-                        abs(self.current_state[0] - self.final_state[0]),
-                        abs(self.current_state[1] - self.final_state[1]),
-                        self.num_steps] + obstacles)
+        pos_x = self.current_state[0]
+        pos_y = self.current_state[1]
 
-        return obs, self.reward, self.done, self.truncated, info
+        # Indicar la dirección del destino
+        final_x = self.final_state[0] - pos_x > 0
+        final_y = self.final_state[1] - pos_y > 0
+
+        # Indicar si muere tras alguna acción
+        up = self._is_posible([pos_x, pos_y - 1])
+        down = self._is_posible([pos_x, pos_y + 1])
+        right = self._is_posible([pos_x + 1, pos_y])
+        left = self._is_posible([pos_x - 1, pos_y])
+
+        observation = [final_x, final_y, up, down, right, left]
+        observation = np.array(observation)
+
+        return observation, self.reward, self.done, self.truncated, info
 
     def reset(self, seed=None):
-
-        # Estado inicial
-        self.initial_state = (0, 0)
-
-        # Obstáculos
-        obstacles = DATA['obstacles']
-
-        # self.final_state = DATA['final_state']
-        self.final_state = (7, 7)
 
         self.action_log = []
         self.state_log = deque([], maxlen=8)
 
-        # Definimos el espacio de acción
-        #   0: UP
-        #   1: DOWN
-        #   2: RIGHT
-        #   3: LEFT
-        self.action_space = spaces.Discrete(4)
-        self.observation_space = spaces.Box(low=0, high=80,
-                                            shape=(4,), dtype=np.float64)
+        self.initial_state = (np.random.choice([0, 7]), np.random.choice([7, 0]))
 
-        # Lista de coordenadas de los obstaculos
-        # self.obstacles = [(elem[0], elem[1]) for elem in DATA['obstacles']]
-        self.obstacles = random_obstacles(5)
+        self.final_state = random_final_state(self.initial_state)
+
+        self.obstacles = random_obstacles(NUM_OBSTACLES, self.initial_state, self.final_state)
 
         # Fin de la partida
         self.truncated = False
@@ -231,17 +221,25 @@ class MazeEnv(gymnasium.Env):
             cv2.rectangle(self.img, (self.final_state[0] * 80, self.final_state[1] * 80),
                           (self.final_state[0] * 80 + 80, self.final_state[1] * 80 + 80), (0, 255, 255), -1)
 
-        obstacles = list()
-        for obstacle in self.obstacles:
-            obstacles.append(obstacle[0])
-            obstacles.append(obstacle[1])
+        ######################### Return #########################
 
-        obs = np.array([self.current_state[0], self.current_state[1],
-                        abs(self.current_state[0] - self.final_state[0]),
-                        abs(self.current_state[1] - self.final_state[1]),
-                        self.num_steps] + obstacles)
+        pos_x = self.current_state[0]
+        pos_y = self.current_state[1]
 
-        return obs, info
+        # Indicar la dirección del destino
+        final_x = self.final_state[0] - pos_x > 0
+        final_y = self.final_state[1] - pos_y > 0
+
+        # Indicar si muere tras alguna acción
+        up = [pos_x, pos_y - 1] in self.obstacles or pos_y == 0
+        down = [pos_x, pos_y + 1] in self.obstacles or pos_y == 7
+        right = [pos_x + 1, pos_y] in self.obstacles or pos_x == 7
+        left = [pos_x - 1, pos_y] in self.obstacles or pos_x == 0
+
+        observation = [final_x, final_y, up, down, right, left]
+        observation = np.array(observation)
+
+        return observation, {}
 
     def _is_posible(self, state):
         return state not in self.obstacles and -1 < state[0] < 8 and -1 < state[1] < 8
