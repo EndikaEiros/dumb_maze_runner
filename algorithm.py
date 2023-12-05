@@ -24,7 +24,7 @@ def evaluate_policy(model, env, n_eval_episodes: int = 100):
             episode_reward += reward
             episode_steps += 1
 
-        print(f"{n + 1}: - Steps: {episode_steps}  - Reward: {episode_reward}  - Win: {not truncated}  - Solution: {info['Solution']} ")
+        print(f"{n + 1}: - Steps: {episode_steps}  - Solution: {info['action_log']} ")
         cv2.destroyAllWindows()
         total_reward += episode_reward
         total_steps += episode_steps
@@ -41,13 +41,13 @@ maze_env = MazeEnv(render=False)
 # while True:
 #     check_env(maze_env)
 
-# Crear y entrenar el modelo PPO
-ppo_model = PPO("MlpPolicy", maze_env, verbose=0)
-# ppo_model = PPO.load("ppo_maze_v2.1.model", env=maze_env)
 
-STEPS_PER_BATCH = 100_000
-BATCH_SIZE = 10
-EVAL_EPISODES = 10
+# ppo_model = PPO("MlpPolicy", maze_env, verbose=0)
+ppo_model = PPO.load("ppo_maze_prueba6.model", env=maze_env)
+
+STEPS_PER_BATCH = 200_000
+BATCH_SIZE = 5
+EVAL_EPISODES = 5
 
 for i in range(BATCH_SIZE):
     print(f"\n training...\n")
@@ -55,8 +55,8 @@ for i in range(BATCH_SIZE):
     print(f"\n EVALUATION: {i+1}\t TRAINING STEPS: {STEPS_PER_BATCH * (i+1)}\n")
     evaluate_policy(model=ppo_model, env=MazeEnv(render=True), n_eval_episodes=EVAL_EPISODES)
 
-ppo_model.save(f"ppo_maze_prueba0.model")
+ppo_model.save(f"ppo_maze_prueba7.model")
 
-# ppo_model = PPO.load("ppo_maze_prueba0.model", env=maze_env)
+# ppo_model = PPO.load("ppo_maze_prueba6.model", env=maze_env)
 # evaluate_policy(ppo_model, MazeEnv(render=True), n_eval_episodes=10)
 

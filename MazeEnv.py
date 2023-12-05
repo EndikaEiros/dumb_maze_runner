@@ -1,25 +1,26 @@
-import random
 from collections import deque
 from random import randint
 from time import sleep
 
 import cv2
 import gymnasium
+import numpy as np
 from gym import spaces
 from gymnasium import spaces
 from pylab import *
 
-MAX_STEPS_LIMIT = 64
-NUM_OBSTACLES = 5
+MAX_STEPS_LIMIT = 32
+NUM_OBSTACLES = 8
 GOAL_REWARD = 10
 DIED_REWARD = -10
+FPS = 5
 
 
 def random_final_state(initial_state):
     # Generar un destino random
-    final_state = (randint(5, 7), randint(5, 7))
+    final_state = (randint(0, 7), randint(0, 7))
     while final_state == initial_state:
-        final_state = (randint(5, 7), randint(5, 7))
+        final_state = (randint(0, 7), randint(0, 7))
     return final_state
 
 
@@ -38,214 +39,208 @@ class MazeEnv(gymnasium.Env):
 
         super(MazeEnv, self).__init__()
 
-        # Estado inicial
-        self.initial_state = (np.random.choice([0, 7]), np.random.choice([7, 0]))
+        # Action and observation spaces
+        self.action_space = spaces.Discrete(4)
+        self.observation_space = spaces.Box(low=-80, high=80, shape=(6,), dtype=np.float64)
 
+        # Initial and final state
+        self.initial_state = (np.random.choice([0, 7]), np.random.choice([7, 0]))
         self.final_state = random_final_state(self.initial_state)
 
-        # Obstáculos
+        # Manhattan Distance between init and goal
+        self.initial_dist_to_goal = np.sum(np.abs(np.array(self.initial_state) - np.array(self.final_state)))
+
+        # Obstacles
         self.obstacles = random_obstacles(NUM_OBSTACLES, self.initial_state, self.final_state)
 
+        # Action history
         self.action_log = []
-        self.state_log = deque([], maxlen=8)
 
-        # Definimos el espacio de acción
-        #   0: UP
-        #   1: DOWN
-        #   2: RIGHT
-        #   3: LEFT
-        self.action_space = spaces.Discrete(4)
-        self.observation_space = spaces.Box(low=0, high=80, shape=(6,), dtype=np.float64)
-
-        # Visualización del juego
+        # Visualize game
         self.render = render
+        self.letter_color = (255, 144, 30)
 
-        # Fin de la partida
+        # Game Over
         self.truncated = False
         self.done = False
 
-        # Actual state (fila, columna)
-        self.current_state = self.initial_state
-        self.next_state = None
+        # Current state
+        self.current_state = list(self.initial_state)
 
-        # Número de pasos
-        self.num_steps = 0
+        # Reward and number of steps
+        self.reward, self.num_steps = 0, 0
 
-        # Recompensas
-        self.reward, self.prev_reward = 0, 0
+        # Aditional information
+        self.info = {}
 
         if self.render:
-
-            # Draw board (black and white)
+            # Generate board
             self.img = np.zeros((640, 640, 3), dtype=np.uint8)
-            for x in range(0, 9):
-                if x % 2 == 0:
-                    p = range(0, 8, 2)
-                else:
-                    p = range(1, 9, 2)
-                for y in p:
-                    cv2.rectangle(self.img, (x * 80, y * 80), (x * 80 + 80, y * 80 + 80), (50, 50, 50), -1)
-
-            # Draw obstacles (red)
-            for obstacle in self.obstacles:
-                cv2.rectangle(self.img, (obstacle[0] * 80, obstacle[1] * 80),
-                              (obstacle[0] * 80 + 80, obstacle[1] * 80 + 80), (0, 0, 255), -1)
-
-            # Draw goal (yellow)
-            cv2.rectangle(self.img, (self.final_state[0] * 80, self.final_state[1] * 80),
-                          (self.final_state[0] * 80 + 80, self.final_state[1] * 80 + 80), (0, 255, 255), -1)
+            self._generate_board()
 
     def step(self, action):
 
-        info = {"Solution": []}
+        ############## Move ###############
 
-        ############## Mover ##############
+        if action == 0:  # UP
+            self.current_state[1] -= 1
+        if action == 1:  # DOWN
+            self.current_state[1] += 1
+        if action == 2:  # RIGHT
+            self.current_state[0] += 1
+        if action == 3:  # LEFT
+            self.current_state[0] -= 1
 
-        if action == 0: self.next_state = (self.current_state[0] - 1, self.current_state[1])
-        if action == 1: self.next_state = (self.current_state[0] + 1, self.current_state[1])
-        if action == 2: self.next_state = (self.current_state[0], self.current_state[1] + 1)
-        if action == 3: self.next_state = (self.current_state[0], self.current_state[1] - 1)
+        self.action_log.append(action)
+        self.num_steps += 1
 
-        if self._is_posible(self.next_state):
+        ############# If died #############
 
-            self.action_log.append(action)
-            self.current_state = self.next_state
-            self.num_steps += 1
-            goal_reward = 0
+        if self._is_dead(self.current_state) or self.num_steps >= MAX_STEPS_LIMIT:
 
-            ########## Visualización ##########
-
-            if self.render:
-                board = self.img.copy()
-                cv2.circle(board, (self.current_state[0] * 80 + 40, self.current_state[1] * 80 + 40),
-                           30, (0, 255, 0), -1)
-                cv2.imshow('DUMB MAZE RUNNER', board)
-                cv2.waitKey(1)
-                sleep(0.33)
-
-            if self._is_terminal(self.next_state):
-
-                if self.render:
-                    board = np.zeros((640, 640, 3), dtype=np.uint8)
-                    cv2.putText(board, f'Win in {self.num_steps} steps', (200, 320), cv2.FONT_HERSHEY_SIMPLEX,
-                                1, (255, 255, 255), 2, cv2.LINE_AA)
-                    cv2.imshow('DUMB MAZE RUNNER', board)
-                    cv2.waitKey(1)
-                    sleep(0.33)
-
-                info["Solution"] = self.action_log
-                goal_reward = GOAL_REWARD
-                self.done = True
-
-            ############# Rewards #############
-
-            self.reward = goal_reward
-
-            # manhattan_dist_to_goal = np.sum(np.abs(np.array(self.current_state) - np.array(self.final_state)))
-            # if goal_reward == 0: self.reward = 1 / manhattan_dist_to_goal
-
-            if self.num_steps >= MAX_STEPS_LIMIT:
-                self.done = True
-                self.truncated = True
-                self.reward = 0
-
-        else:
-
+            self.info["num_steps"] = self.num_steps
+            self.info["action_log"] = []
+            self.letter_color = (0, 0, 255)
             self.reward = DIED_REWARD
             self.truncated = True
             self.done = True
 
-        ######################### Return #########################
+        ############# if win ##############
 
-        pos_x = self.current_state[0]
-        pos_y = self.current_state[1]
+        elif self._has_won(self.current_state):
 
-        # Indicar la dirección del destino
-        final_x = self.final_state[0] - pos_x > 0
-        final_y = self.final_state[1] - pos_y > 0
+            self.info["num_steps"] = self.num_steps
+            self.info["action_log"] = self.action_log
+            msg = f"Solved in {self.num_steps} steps"
+            self.letter_color = (0, 255, 0)
+            self.reward = GOAL_REWARD / self.num_steps
+            self.done = True
 
-        # Indicar si muere tras alguna acción
-        up = self._is_posible([pos_x, pos_y - 1])
-        down = self._is_posible([pos_x, pos_y + 1])
-        right = self._is_posible([pos_x + 1, pos_y])
-        left = self._is_posible([pos_x - 1, pos_y])
+        else:
 
-        observation = [final_x, final_y, up, down, right, left]
-        observation = np.array(observation)
+            ############# Rewards #############
 
-        return observation, self.reward, self.done, self.truncated, info
+            # manhattan_dist_to_goal = np.sum(np.abs(np.array(self.current_state) - np.array(self.final_state)))
+            # if goal_reward == 0: self.reward = 1 / manhattan_dist_to_goal
+            self.reward = 0
 
-    def reset(self, seed=None):
-
-        self.action_log = []
-        self.state_log = deque([], maxlen=8)
-
-        self.initial_state = (np.random.choice([0, 7]), np.random.choice([7, 0]))
-
-        self.final_state = random_final_state(self.initial_state)
-
-        self.obstacles = random_obstacles(NUM_OBSTACLES, self.initial_state, self.final_state)
-
-        # Fin de la partida
-        self.truncated = False
-        self.done = False
-
-        # Actual state (fila, columna)
-        self.current_state = self.initial_state
-        self.next_state = None
-
-        # Número de pasos
-        self.num_steps = 0
-
-        # Recompensas
-        self.reward, self.prev_reward = 0, 0
+        ########## Visualization ##########
 
         if self.render:
 
-            # Draw board (black and white)
+            board = self.img.copy()
+            cv2.circle(board, (self.current_state[0] * 80 + 40, self.current_state[1] * 80 + 40),
+                       25, (0, 150, 255), -1)
+            cv2.putText(board, f"Steps: {self.num_steps}/{self.initial_dist_to_goal}", (20, 620),
+                        cv2.FONT_HERSHEY_PLAIN, 2, self.letter_color, 1, cv2.LINE_AA)
+            if self.done:
+                cv2.putText(board, 'GAME OVER', (140, 340), cv2.FONT_HERSHEY_SIMPLEX,
+                            2, self.letter_color, 2, cv2.LINE_AA)
+                sleep_time = 1
+            else:
+                sleep_time = 1 / FPS
+            cv2.imshow('DUMB MAZE RUNNER', board)
+            cv2.waitKey(1)
+            sleep(sleep_time)
+
+        ############# Return ##############
+
+        observation = self._generate_current_observation()
+
+        return observation, self.reward, self.done, self.truncated, self.info
+
+    def reset(self, seed=None):
+
+        # Action and observation spaces
+        self.action_space = spaces.Discrete(4)
+        self.observation_space = spaces.Box(low=-80, high=80, shape=(6,), dtype=np.float64)
+
+        # Initial and final state
+        self.initial_state = (np.random.choice([0, 7]), np.random.choice([7, 0]))
+        self.final_state = random_final_state(self.initial_state)
+
+        # Manhattan Distance between init and goal
+        self.initial_dist_to_goal = np.sum(np.abs(np.array(self.initial_state) - np.array(self.final_state)))
+
+        # Obstacles
+        self.obstacles = random_obstacles(NUM_OBSTACLES, self.initial_state, self.final_state)
+
+        # Action history
+        self.action_log = []
+
+        # Visualize game
+        self.letter_color = (255, 144, 30)
+
+        # Game Over
+        self.truncated = False
+        self.done = False
+
+        # Current state
+        self.current_state = list(self.initial_state)
+
+        # Reward and number of steps
+        self.reward, self.num_steps = 0, 0
+
+        # Aditional information
+        self.info = {}
+
+        if self.render:
+            # Generate board
             self.img = np.zeros((640, 640, 3), dtype=np.uint8)
-            for x in range(0, 9):
-                if x % 2 == 0:
-                    p = range(0, 8, 2)
-                else:
-                    p = range(1, 9, 2)
-                for y in p:
-                    cv2.rectangle(self.img, (x * 80, y * 80), (x * 80 + 80, y * 80 + 80), (50, 50, 50), -1)
+            self._generate_board()
 
-            # Draw obstacles (red)
-            for obstacle in self.obstacles:
-                cv2.rectangle(self.img, (obstacle[0] * 80, obstacle[1] * 80),
-                              (obstacle[0] * 80 + 80, obstacle[1] * 80 + 80), (0, 0, 255), -1)
+        ############# Return ##############
 
-            # Draw goal (yellow)
-            cv2.rectangle(self.img, (self.final_state[0] * 80, self.final_state[1] * 80),
-                          (self.final_state[0] * 80 + 80, self.final_state[1] * 80 + 80), (0, 255, 255), -1)
+        observation = self._generate_current_observation()
 
-        ######################### Return #########################
+        return observation, self.info
+
+    def _is_dead(self, state):
+
+        # returns true if current state is a terminal state
+        return tuple(state) in self.obstacles or -1 in state or 8 in state
+
+    def _has_won(self, state):
+
+        # returns true if current state is the goal
+        return self.final_state == tuple(state)
+
+    def _generate_current_observation(self):
 
         pos_x = self.current_state[0]
         pos_y = self.current_state[1]
 
-        # Indicar la dirección del destino
+        # Direction to the goal
         final_x = self.final_state[0] - pos_x > 0
         final_y = self.final_state[1] - pos_y > 0
 
-        # Indicar si muere tras alguna acción
-        up = [pos_x, pos_y - 1] in self.obstacles or pos_y == 0
-        down = [pos_x, pos_y + 1] in self.obstacles or pos_y == 7
-        right = [pos_x + 1, pos_y] in self.obstacles or pos_x == 7
-        left = [pos_x - 1, pos_y] in self.obstacles or pos_x == 0
+        # If there are elements around
+        up = self._is_dead([pos_x, pos_y - 1])
+        down = self._is_dead([pos_x, pos_y + 1])
+        right = self._is_dead([pos_x + 1, pos_y])
+        left = self._is_dead([pos_x - 1, pos_y])
 
-        observation = [final_x, final_y, up, down, right, left]
-        observation = np.array(observation)
+        # returns the observation of current state
+        return np.array([final_x, final_y, up, down, right, left])
 
-        return observation, {}
+    def _generate_board(self):
 
-    def _is_posible(self, state):
-        return state not in self.obstacles and -1 < state[0] < 8 and -1 < state[1] < 8
+        for x in range(0, 9):
+            if x % 2 == 0:
+                p = range(0, 8, 2)
+            else:
+                p = range(1, 9, 2)
+            for y in p:
+                cv2.rectangle(self.img, (x * 80, y * 80), (x * 80 + 80, y * 80 + 80), (40, 40, 40), -1)
 
-    def _is_terminal(self, state):
-        return self.final_state[0] == state[0] and self.final_state[1] == state[1]
+        # Draw obstacles (red)
+        for obstacle in self.obstacles:
+            cv2.rectangle(self.img, (obstacle[0] * 80 + 2, obstacle[1] * 80 + 2),
+                          (obstacle[0] * 80 + 80 - 2, obstacle[1] * 80 + 80 - 2), (0, 0, 100), -1)
+
+        # Draw goal (green)
+        cv2.rectangle(self.img, (self.final_state[0] * 80 + 2, self.final_state[1] * 80 + 2),
+                      (self.final_state[0] * 80 + 80 - 2, self.final_state[1] * 80 + 80 - 2), (0, 100, 0), -1)
 
     def close(self):
         pass
