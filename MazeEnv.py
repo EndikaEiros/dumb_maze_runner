@@ -145,7 +145,7 @@ class MazeEnv(gymnasium.Env):
 
         ############# Return ##############
 
-        observation = self._generate_current_observation()
+        observation = self._get_obs()
 
         return observation, self.reward, self.done, self.truncated, self.info
 
@@ -191,7 +191,7 @@ class MazeEnv(gymnasium.Env):
 
         ############# Return ##############
 
-        observation = self._generate_current_observation()
+        observation = self._get_obs()
 
         return observation, self.info
 
@@ -205,7 +205,7 @@ class MazeEnv(gymnasium.Env):
         # returns true if current state is the goal
         return self.final_state == tuple(state)
 
-    def _generate_current_observation(self):
+    def _get_obs(self):
 
         pos_x = self.current_state[0]
         pos_y = self.current_state[1]
