@@ -2,7 +2,8 @@
 
 Es este repositorio se incluye el directorio src del worspace de ROS con los nodos correspondientes.
 
-![](https://github.com/EndikaEiros/dumb_maze_runner/blob/main/Examples.gif)
+
+![alt text](https://github.com/EndikaEiros/dumb_maze_runner/blob/main/Examples.gif "Game")
 
 ## Nodo Visión
 
