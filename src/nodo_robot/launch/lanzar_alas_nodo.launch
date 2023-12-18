@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+    <arg name="alas_nodo"/>
+
+    <node name="Alazne" pkg="alas_nodo" type="prueba.py" args="$(arg alas_nodo)">
+        <param name="alas_nodo" value="$(arg alas_nodo)" />
+    </node>
+    <node name="Asier" pkg="alas_nodo" type="prueba.py" args="$(arg alas_nodo)"/>
+</launch>
